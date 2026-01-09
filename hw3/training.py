@@ -94,7 +94,23 @@ class Trainer(abc.ABC):
             #  - Implement early stopping. This is a very useful and
             #    simple regularization technique that is highly recommended.
             # ====== YOUR CODE: ======
-            pass
+            train_result = self.train_epoch(dl_train)
+            test_result = self.test_epoch(dl_test)
+            
+            mean = lambda x: sum(x) / len(x)
+            train_loss.append(mean(train_result.losses))
+            train_acc.append(train_result.accuracy)
+            test_loss.append(mean(test_result.losses))
+            test_acc.append(test_result.accuracy)
+
+            if best_acc is None or test_result.accuracy > best_acc:
+                save_checkpoint = True
+                best_acc = test_result.accuracy
+                epochs_without_improvement = 0
+            else:
+                epochs_without_improvement += 1
+                if early_stopping is not None and early_stopping <= epochs_without_improvement:
+                    break
             # ========================
 
             # Save model checkpoint if requested
@@ -222,14 +238,14 @@ class RNNTrainer(Trainer):
     def train_epoch(self, dl_train: DataLoader, **kw):
         # TODO: Implement modifications to the base method, if needed.
         # ====== YOUR CODE: ======
-        pass
+        self.h = None
         # ========================
         return super().train_epoch(dl_train, **kw)
 
     def test_epoch(self, dl_test: DataLoader, **kw):
         # TODO: Implement modifications to the base method, if needed.
         # ====== YOUR CODE: ======
-        pass
+        self.h = None
         # ========================
         return super().test_epoch(dl_test, **kw)
 
@@ -247,7 +263,18 @@ class RNNTrainer(Trainer):
         #  - Update params
         #  - Calculate number of correct char predictions
         # ====== YOUR CODE: ======
-        pass
+        output, new_h = self.model(x, self.h)
+        loss = self.loss_fn(output.transpose(1, 2), y)
+
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+
+        self.h = new_h.detach()
+
+        pred = torch.argmax(output, dim=2) 
+        num_correct = (pred == y).sum()
+        
         # ========================
 
         # Note: scaling num_correct by seq_len because each sample has seq_len
@@ -267,7 +294,10 @@ class RNNTrainer(Trainer):
             #  - Loss calculation
             #  - Calculate number of correct predictions
             # ====== YOUR CODE: ======
-            pass
+            output, new_h = self.model(x, self.h)
+            loss = self.loss_fn(output.transpose(1, 2), y)
+            pred = torch.argmax(output, dim=2) 
+            num_correct = (pred == y).sum()
             # ========================
 
         return BatchResult(loss.item(), num_correct.item() / seq_len)
@@ -279,7 +309,14 @@ class VAETrainer(Trainer):
         x = x.to(self.device)  # Image batch (N,C,H,W)
         # TODO: Train a VAE on one batch.
         # ====== YOUR CODE: ======
-        pass
+        self.optimizer.zero_grad()
+
+        xr, mu, log_sigma2 = self.model(x)
+        loss, data_loss, _ = self.loss_fn(x, xr, mu, log_sigma2)
+        
+        loss.backward()
+        self.optimizer.step()
+        
         # ========================
 
         return BatchResult(loss.item(), 1 / data_loss.item())
@@ -291,7 +328,8 @@ class VAETrainer(Trainer):
         with torch.no_grad():
             # TODO: Evaluate a VAE on one batch.
             # ====== YOUR CODE: ======
-            pass
+            xr, mu, log_sigma2 = self.model(x)
+            loss, data_loss, _ = self.loss_fn(x, xr, mu, log_sigma2)
             # ========================
 
         return BatchResult(loss.item(), 1 / data_loss.item())

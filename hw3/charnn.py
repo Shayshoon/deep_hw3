@@ -23,7 +23,12 @@ def char_maps(text: str):
     #  It's best if you also sort the chars before assigning indices, so that
     #  they're in lexical order.
     # ====== YOUR CODE: ======
-    pass
+    chars = sorted(set(text))
+    char_to_idx = {}
+    idx_to_char = {}
+    for i, char in enumerate(chars):
+        char_to_idx[char] = i
+        idx_to_char[i] = char
     # ========================
     return char_to_idx, idx_to_char
 
@@ -39,7 +44,13 @@ def remove_chars(text: str, chars_to_remove):
     """
     # TODO: Implement according to the docstring.
     # ====== YOUR CODE: ======
-    pass
+    text_clean = text
+    n_removed = len(text_clean)
+    
+    for char in chars_to_remove:
+        text_clean = text_clean.replace(char, '')
+    n_removed -= len(text_clean)
+    
     # ========================
     return text_clean, n_removed
 
@@ -59,7 +70,8 @@ def chars_to_onehot(text: str, char_to_idx: dict) -> Tensor:
     """
     # TODO: Implement the embedding.
     # ====== YOUR CODE: ======
-    pass
+    indices = [char_to_idx[char] for char in text]
+    result = torch.eye(len(char_to_idx), dtype=torch.int8)[indices]
     # ========================
     return result
 
@@ -76,7 +88,8 @@ def onehot_to_chars(embedded_text: Tensor, idx_to_char: dict) -> str:
     """
     # TODO: Implement the reverse-embedding.
     # ====== YOUR CODE: ======
-    pass
+    indices = embedded_text.argmax(dim=1)
+    result = ''.join([idx_to_char[int(i)] for i in indices])
     # ========================
     return result
 
@@ -105,7 +118,14 @@ def chars_to_labelled_samples(text: str, char_to_idx: dict, seq_len: int, device
     #  3. Create the labels tensor in a similar way and convert to indices.
     #  Note that no explicit loops are required to implement this function.
     # ====== YOUR CODE: ======
-    pass
+    embedded_text = chars_to_onehot(text, char_to_idx)
+    samples = torch.split(embedded_text, seq_len, dim=0)
+    samples = torch.stack(samples[:-1], dim=0)
+    samples.to(device)
+    
+    labels = torch.split(embedded_text.argmax(dim=1)[1:], seq_len, dim=0)
+    labels = torch.stack(labels[:-1], dim=0)
+    labels.to(device)
     # ========================
     return samples, labels
 
@@ -121,7 +141,7 @@ def hot_softmax(y, dim=0, temperature=1.0):
     """
     # TODO: Implement based on the above.
     # ====== YOUR CODE: ======
-    pass
+    return torch.softmax(y/temperature, dim=dim)
     # ========================
 
 
@@ -156,7 +176,23 @@ def generate_from_model(model, start_sequence, n_chars, char_maps, T):
     #  necessary for this. Best to disable tracking for speed.
     #  See torch.no_grad().
     # ====== YOUR CODE: ======
-    pass
+    embedded_sequence = chars_to_onehot(start_sequence, char_to_idx)
+
+    with torch.no_grad():
+        embedded_sequence = torch.unsqueeze(embedded_sequence, 0)
+        y, h = model(embedded_sequence.to(dtype=torch.float, device=device))
+        pred_idx = torch.multinomial(hot_softmax(y, dim=2, temperature=T)[0][-1], 1)
+        pred_char = idx_to_char[pred_idx.item()]
+        out_text = f'{out_text}{pred_char}'
+        
+        for i in range(n_chars - len(start_sequence) - 1):
+            embedded_sequence = chars_to_onehot(pred_char, char_to_idx)
+            embedded_sequence = torch.unsqueeze(embedded_sequence, 0)
+            y, h = model(embedded_sequence.to(dtype=torch.float, device=device), h)
+            pred_idx = torch.multinomial(hot_softmax(y, dim=2, temperature=T)[0][-1], 1)
+            pred_char = idx_to_char[pred_idx.item()]
+            out_text = f'{out_text}{pred_char}'
+        
     # ========================
 
     return out_text
@@ -189,7 +225,8 @@ class SequenceBatchSampler(torch.utils.data.Sampler):
         #  you can drop it.
         idx = None  # idx should be a 1-d list of indices.
         # ====== YOUR CODE: ======
-        pass
+        batches = len(self.dataset) // self.batch_size
+        idx = [j*batches + i for j in range(self.batch_size) for i in range(batches)]
         # ========================
         return iter(idx)
 
@@ -221,7 +258,23 @@ class MultilayerGRU(nn.Module):
         self.layer_params = []
 
         # ====== YOUR CODE: ======
-        pass
+        self.layer_params = nn.ModuleList([])
+        for i in range(n_layers):
+            idim = in_dim if i == 0 else h_dim
+            odim = h_dim
+            
+            update_wx = nn.Linear(idim, h_dim, bias=True)
+            update_wh = nn.Linear(h_dim, h_dim, bias=False)
+            reset_wx = nn.Linear(idim, h_dim, bias=True)
+            reset_wh = nn.Linear(h_dim, h_dim, bias=False)
+            candidate_wx = nn.Linear(idim, h_dim, bias=True)
+            candidate_wh = nn.Linear(h_dim, h_dim, bias=False)
+            dropout_layer = nn.Dropout(dropout)
+            
+            layer = nn.ModuleList([update_wx, update_wh, reset_wx, reset_wh, candidate_wx, candidate_wh, dropout_layer])
+            self.layer_params.append(layer)
+        self.layer_params.append(nn.ModuleList([nn.Linear(h_dim, out_dim)]))
+        
         # ========================
 
     def forward(self, input: Tensor, hidden_state: Tensor = None):
