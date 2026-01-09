@@ -26,7 +26,64 @@ def sliding_window_attention(q, k, v, window_size, padding_mask=None):
     values, attention = None, None
 
     # ====== YOUR CODE: ======
-    pass
+    device = q.device
+    
+    # 1. Generate Indices (The "Sparse" map)
+    radius = window_size // 2
+    row_idx, col_idx = [], []
+    
+    for offset in range(-radius, radius + 1):
+        start = max(0, -offset)
+        end = min(seq_len, seq_len - offset)
+        
+        rows = torch.arange(start, end, device=device)
+        cols = rows + offset
+        
+        row_idx.append(rows)
+        col_idx.append(cols)
+        
+    row_indices = torch.cat(row_idx)
+    col_indices = torch.cat(col_idx)
+    
+    # 2. Gather & Compute (Only for valid pairs)
+    q_selected = q[..., row_indices, :]
+    k_selected = k[..., col_indices, :]
+    
+    scores_1d = (q_selected * k_selected).sum(dim=-1) / math.sqrt(embed_dim)
+    
+    # 3. Scatter (Reconstruct the Matrix)
+    # FIX: Use a finite large negative number (-1e4) instead of -inf to prevent NaNs in softmax
+    min_value = -1e4 
+    attn_shape = q.shape[:-1] + (seq_len,)
+    attention = torch.full(attn_shape, min_value, device=device)
+    
+    attention[..., row_indices, col_indices] = scores_1d
+
+    # 4. Apply Padding Mask (Masking Keys)
+    if padding_mask is not None:
+        # Reshape mask: (Batch, 1, 1, SeqLen) for 4D input or (Batch, 1, SeqLen) for 3D
+        mask_key = padding_mask
+        while mask_key.dim() < attention.dim():
+            mask_key = mask_key.unsqueeze(1)
+            
+        attention = attention.masked_fill(mask_key == 0, min_value)
+
+    # 5. Softmax
+    attention = torch.softmax(attention, dim=-1)
+    
+    # 6. Compute output: A * V
+    values = torch.matmul(attention, v)
+    
+    # 7. Apply Padding Mask to Output (Masking Queries)
+    # FIX: Zero out vectors for padding tokens so they don't corrupt the residual stream
+    if padding_mask is not None:
+        # Reshape mask to broadcast over Heads and Dims
+        # Target: [Batch, 1, SeqLen, 1] for 4D or [Batch, SeqLen, 1] for 3D
+        mask_output = padding_mask.unsqueeze(-1)
+        if values.dim() == 4: # Multi-head case
+             mask_output = mask_output.unsqueeze(1)
+             
+        values = values * mask_output.float()
     # ======================
 
     return values, attention
@@ -69,7 +126,7 @@ class MultiHeadAttention(nn.Module):
         # Determine value outputs
         # call the sliding window attention function you implemented
         # ====== YOUR CODE: ======
-        pass
+        values, attention = sliding_window_attention(q, k, v, self.window_size, padding_mask=padding_mask)
         # ========================
 
         values = values.permute(0, 2, 1, 3) # [Batch, SeqLen, Head, Dims]
@@ -146,7 +203,11 @@ class EncoderLayer(nn.Module):
         '''
 
         # ====== YOUR CODE: ======
-        pass
+        attn_out = self.self_attn(x, padding_mask)
+        x = self.norm1(x + self.dropout(attn_out))
+
+        fed_forward = self.feed_forward(x)
+        x = self.norm2(x + self.dropout(fed_forward))
         # ========================
         
         return x
@@ -188,9 +249,27 @@ class Encoder(nn.Module):
         output = None
 
         # ====== YOUR CODE: ======
-        pass
-        # ========================
+        # 1. Embeddings & Position
+        # [Batch, SeqLen] -> [Batch, SeqLen, EmbedDim]
+        x = self.encoder_embedding(sentence)
         
+        x = self.positional_encoding(x)
+        x = self.dropout(x)
+
+        # 2. Encoder Layers
+        # Iterate manually because ModuleList doesn't handle extra args (padding_mask)
+        for layer in self.encoder_layers:
+            x = layer(x, padding_mask)
+
+        # CLS pooling
+        pooled_output = x[:, 0, :]
+        # 4. Classification Head
+        # [Batch, EmbedDim] -> [Batch, 1]
+        output = self.classification_mlp(pooled_output)
+        
+        # Squeeze to get [Batch]
+        # output = logits.squeeze(-1)
+        # ========================
         
         return output  
     
