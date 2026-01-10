@@ -163,12 +163,17 @@ def part3_transformer_encoder_hyperparams():
 
     # TODO: Tweak the hyperparameters to train the transformer encoder.
     # ====== YOUR CODE: ======
+    # little overfit: {'embed_dim': 32, 'num_heads': 8, 'num_layers': 3, 'hidden_dim': 128, 'window_size': 8, 'droupout': 0.1, 'lr': 0.001}
+    # less overfit: {'embed_dim': 32, 'num_heads': 4, 'num_layers': 3, 'hidden_dim': 128, 'window_size': 8, 'droupout': 0.1, 'lr': 0.001}
+    # untrainable: {'embed_dim': 64, 'num_heads': 8, 'num_layers': 4, 'hidden_dim': 128, 'window_size': 4, 'droupout': 0.1, 'lr': 0.001}
+    # BEST: little overfit {'embed_dim': 32, 'num_heads': 4, 'num_layers': 2, 'hidden_dim': 128, 'window_size': 16, 'droupout': 0.1, 'lr': 0.001}
+    # WORKS: {'embed_dim': 32, 'num_heads': 4, 'num_layers': 3, 'hidden_dim': 128, 'window_size': 16, 'droupout': 0.1, 'lr': 0.001}
     hypers = dict(
-        embed_dim=16,       # Must be > 0 and divisible by num_heads
+        embed_dim=32,
         num_heads=4,
-        num_layers=2,
-        hidden_dim=32,
-        window_size=4,      # Must be even
+        num_layers=3,
+        hidden_dim=128,
+        window_size=16,
         droupout=0.1,
         lr=0.001,
     )

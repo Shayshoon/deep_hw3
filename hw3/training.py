@@ -375,9 +375,6 @@ class TransformerEncoderTrainer(Trainer):
             #  fill out the testing loop.
             # ====== YOUR CODE: ======
             pred = self.model(input_ids, attention_mask)
-            
-            print(label)
-            print(pred)
 
             loss = self.loss_fn(pred.squeeze(-1), label)
             pred_binary = torch.round(torch.sigmoid(pred)).float()
