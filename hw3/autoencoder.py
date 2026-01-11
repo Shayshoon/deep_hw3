@@ -21,6 +21,7 @@ class EncoderCNN(nn.Module):
         # ====== YOUR CODE: ======
         hid_dim = 64
         modules = [
+            # Layer 1: 64x64 -> 32x32
             nn.Conv2d(in_channels, hid_dim, kernel_size=4, stride=2, padding=1, bias=False),
             nn.LeakyReLU(0.2, inplace=True),
                         
@@ -163,7 +164,6 @@ class VAE(nn.Module):
             #    the mean, i.e. psi(z).
             # ====== YOUR CODE: ======
             z = torch.randn(n, self.z_dim, device=device)
-            # h = self.mu(z)
             samples = self.decode(z)
             # ========================
         # Detach and move to CPU for display purposes.
@@ -197,39 +197,36 @@ def vae_loss(x, xr, z_mu, z_log_sigma2, x_sigma2):
     #  2. You need to average over the batch dimension.
     # ====== YOUR CODE: ======
 
-    # Dimensions
-    # N: Batch size, dx: Input dimension (C*H*W), dz: Latent dimension
     N = x.size(0)
     dx = x[0].numel()
     dz = z_mu.size(1)
 
-    # 1. Data Reconstruction Loss
     # Formula: (1 / (sigma^2 * dx)) * ||x - xr||^2
-    # We flatten x and xr to (N, dx) to compute the norm per sample easily
+    # flatten x and xr to (N, dx) to compute the norm per sample
     diff = x - xr
-    recon_error = diff.pow(2).view(N, -1).sum(dim=1)  # Shape: (N,)
+    recon_error = diff.pow(2).view(N, -1).sum(dim=1)  # (N,)
     
-    # Note: x_sigma2 is a scalar
-    data_loss_term = recon_error / (x_sigma2 * dx)    # Shape: (N,)
+    # x_sigma2 is a scalar
+    data_loss_term = recon_error / (x_sigma2 * dx)    # (N,)
 
-    # 2. KL Divergence Loss
+    # KL Divergence Loss
     # Formula: tr(Sigma) + ||mu||^2 - dz - log_det(Sigma)
     
-    # Sigma is diagonal, so trace is the sum of the variances (diagonal elements)
+    # Sigma is diagonal, so trace is the sum of the diagonal elements
     # z_log_sigma2 is log(sigma^2), so we apply exp() to get sigma^2
-    tr_sigma = torch.exp(z_log_sigma2).sum(dim=1)     # Shape: (N,)
+    tr_sigma = torch.exp(z_log_sigma2).sum(dim=1)     # (N,)
     
     # Squared L2 norm of mu
-    mu_sq_norm = z_mu.pow(2).sum(dim=1)               # Shape: (N,)
+    mu_sq_norm = z_mu.pow(2).sum(dim=1)               # (N,)
     
     # log_det(Sigma) for diagonal matrix is sum of log-diagonal entries
     # Since we already have log(sigma^2), we just sum them.
-    log_det_sigma = z_log_sigma2.sum(dim=1)           # Shape: (N,)
+    log_det_sigma = z_log_sigma2.sum(dim=1)           # (N,)
     
     kldiv_loss_term = tr_sigma + mu_sq_norm - dz - log_det_sigma
 
-    # 3. Combine and Average
-    # The total loss is the sum of the two terms per sample
+    # Combine and Average
+    # total loss is the sum of the two terms per sample
     total_loss = data_loss_term + kldiv_loss_term
     
     # Average over the batch dimension

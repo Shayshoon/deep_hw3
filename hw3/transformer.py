@@ -28,7 +28,8 @@ def sliding_window_attention(q, k, v, window_size, padding_mask=None):
     # ====== YOUR CODE: ======
     device = q.device
     
-    # 1. Generate Indices (The "Sparse" map)
+    # create idx arrays like in reception hour
+    # theres probably a more efficient way to do this without loops but idc
     radius = window_size // 2
     row_idx, col_idx = [], []
     
@@ -45,40 +46,36 @@ def sliding_window_attention(q, k, v, window_size, padding_mask=None):
     row_indices = torch.cat(row_idx)
     col_indices = torch.cat(col_idx)
     
-    # 2. Gather & Compute (Only for valid pairs)
+    # Gather only relevant values of k & q
     q_selected = q[..., row_indices, :]
     k_selected = k[..., col_indices, :]
     
+    # Compute k*q = A
     scores_1d = (q_selected * k_selected).sum(dim=-1) / math.sqrt(embed_dim)
     
-    # 3. Scatter (Reconstruct the Matrix)
-    # FIX: Use a finite large negative number (-1e4) instead of -inf to prevent NaNs in softmax
-    min_value = -1e4 
+    # reconstruct matrix
+    min_value = -1e4 # -inf does problems with softmax and gives NaN
     attn_shape = q.shape[:-1] + (seq_len,)
     attention = torch.full(attn_shape, min_value, device=device)
     
     attention[..., row_indices, col_indices] = scores_1d
 
-    # 4. Apply Padding Mask (Masking Keys)
+    # Apply Padding Mask
     if padding_mask is not None:
-        # Reshape mask: (Batch, 1, 1, SeqLen) for 4D input or (Batch, 1, SeqLen) for 3D
         mask_key = padding_mask
         while mask_key.dim() < attention.dim():
             mask_key = mask_key.unsqueeze(1)
             
         attention = attention.masked_fill(mask_key == 0, min_value)
 
-    # 5. Softmax
+    # Softmax
     attention = torch.softmax(attention, dim=-1)
     
-    # 6. Compute output: A * V
+    # Compute output: A * V
     values = torch.matmul(attention, v)
     
-    # 7. Apply Padding Mask to Output (Masking Queries)
-    # FIX: Zero out vectors for padding tokens so they don't corrupt the residual stream
+    # Apply Padding Mask to Output
     if padding_mask is not None:
-        # Reshape mask to broadcast over Heads and Dims
-        # Target: [Batch, 1, SeqLen, 1] for 4D or [Batch, SeqLen, 1] for 3D
         mask_output = padding_mask.unsqueeze(-1)
         if values.dim() == 4: # Multi-head case
              mask_output = mask_output.unsqueeze(1)
@@ -249,26 +246,22 @@ class Encoder(nn.Module):
         output = None
 
         # ====== YOUR CODE: ======
-        # 1. Embeddings & Position
-        # [Batch, SeqLen] -> [Batch, SeqLen, EmbedDim]
+        # Embed
         x = self.encoder_embedding(sentence)
         
         x = self.positional_encoding(x)
         x = self.dropout(x)
 
-        # 2. Encoder Layers
-        # Iterate manually because ModuleList doesn't handle extra args (padding_mask)
+        # Encoder
         for layer in self.encoder_layers:
             x = layer(x, padding_mask)
 
         # CLS pooling
         pooled_output = x[:, 0, :]
-        # 4. Classification Head
-        # [Batch, EmbedDim] -> [Batch, 1]
+
+        # Classifier
         output = self.classification_mlp(pooled_output)
         
-        # Squeeze to get [Batch]
-        # output = logits.squeeze(-1)
         # ========================
         
         return output  
