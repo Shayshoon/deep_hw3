@@ -42,7 +42,7 @@ def part1_generation_params():
     # TODO: Tweak the parameters to generate a literary masterpiece.
     # ====== YOUR CODE: ======
     start_seq = "DUCHESS OF THE CS FACULTY:"
-    temperature = 0.5
+    temperature = 0.9
     # ========================
     return start_seq, temperature
 

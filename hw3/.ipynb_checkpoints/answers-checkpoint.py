@@ -42,7 +42,7 @@ def part1_generation_params():
     # TODO: Tweak the parameters to generate a literary masterpiece.
     # ====== YOUR CODE: ======
     start_seq = "DUCHESS OF THE CS FACULTY:"
-    temperature = 0.5
+    temperature = 0.9
     # ========================
     return start_seq, temperature
 
@@ -169,11 +169,11 @@ def part3_transformer_encoder_hyperparams():
     # BEST: little overfit {'embed_dim': 32, 'num_heads': 4, 'num_layers': 2, 'hidden_dim': 128, 'window_size': 16, 'droupout': 0.1, 'lr': 0.001}
     # WORKS: {'embed_dim': 32, 'num_heads': 4, 'num_layers': 3, 'hidden_dim': 128, 'window_size': 16, 'droupout': 0.1, 'lr': 0.001}
     hypers = dict(
-        embed_dim=32,
-        num_heads=4,
-        num_layers=3,
-        hidden_dim=128,
-        window_size=16,
+        embed_dim=32, # must be divisible by num_heads
+        num_heads=4, # more heads lets model learn more different relationships
+        num_layers=3, # larger number means more context in later layers
+        hidden_dim=128, # saw 4*embed_dim is a usually good value
+        window_size=16, # dataset features long texts so probably should be enough to cover a full sentence (at least)
         droupout=0.1,
         lr=0.001,
     )
