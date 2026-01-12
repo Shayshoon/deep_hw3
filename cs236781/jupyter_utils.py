@@ -15,7 +15,7 @@ def nbconvert(
     debug=False,
     stdout=False,
     allow_errors=False,
-    timeout_sec=3600,
+    timeout_sec=28800,
 ):
     args = ["jupyter", "nbconvert", f"--to={to}"]
     if execute:
